@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+
+#TODO: ask for input of the domain you wish to use with this server
+#TODO: ping that domain somehow to ensure the DNS is configured correctly.
+# TODO: If it's not, throw and error telling the user to add the DNS record and try after propagation finishes and die.
+
+#Set some variables
+EMAIL=jacob@datajoe.com
+DOMAIN=djoe.us
+SUBDOMAIN=www
+
+#update the server
+yum -y update
+cd ~/
+
+#install some helper tools
+yum install -y wget
+yum group install -y "Development Tools"
+
+#install OpenSSL 1.0.2
+wget https://www.openssl.org/source/openssl-1.0.2h.tar.gz
+tar -zxvf openssl-1.0.2h.tar.gz -C /usr/local/src
+cd /usr/local/src/openssl-1.0.2h/
+./config
+make depend
+make install
+
+mv /bin/openssl /root/
+ln -s /usr/local/ssl/bin/openssl /bin/openssl
+
+#install Nginx
+#Create the repo file:
+echo "# /etc/yum.repos.d/nginx.repo" >> /etc/yum.repos.d/nginx.repo
+echo "[nginx]" >> /etc/yum.repos.d/nginx.repo
+echo "name=nginx repo" >> /etc/yum.repos.d/nginx.repo
+echo "baseurl=http://nginx.org/packages/mainline/centos/7/\$basearch/" >> /etc/yum.repos.d/nginx.repo
+echo "gpgcheck=0" >> /etc/yum.repos.d/nginx.repo
+echo "enabled=1" >> /etc/yum.repos.d/nginx.repo
+
+yum install -y nginx #install nginx
+
+#TODO: update the djoe.us portion to use the domain entry from above
+mkdir -p /var/www/${DOMAIN} #create the webroot where the SSL will be installed
+
+#Configure the new directory to be compatible with selinux
+semanage fcontext -a -t usr_t "/var/www/${DOMAIN}(/.*)?"
+restorecon -Rv /var/www/${DOMAIN}
+
+sed -i '0,/\/usr\/share\/nginx\/html/s//\/var\/www\/${DOMAIN}/' /etc/nginx/conf.d/default.conf #Change root location for webroot
+
+echo "Welcome to nginx" > /var/www/${DOMAIN}/index.html #Create an index.html file for nginx to render
+
+systemctl start nginx #Start nginx
+systemctl enable nginx #Enable nginx so it will start on boot
+
+
+
+#install the secure Cert:
+yum install -y epel-release #the EPEL (Extra Packages for Enterprise Linux) Repository
+yum install -y certbot #Certbot itself
+#TODO: modify the command below to use the previously captured domain
+certbot certonly --webroot -m ${EMAIL} -w /var/www/${DOMAIN} -d ${DOMAIN} -d ${SUBDOMAIN}.${DOMAIN} #Request the SSL using CertBot
+
+sed -i 's/listen       80;/listen       80;\n    listen       443 default_server ssl http2;/' /etc/nginx/conf.d/default.conf
+sed -i 's/server_name  localhost;/server_name  localhost;\n    ssl_certificate_key   \/etc\/letsencrypt\/live\/${SUBDOMAIN}.${DOMAIN}\/privkey.pem;/' /etc/nginx/conf.d/default.conf
+sed -i 's/server_name  localhost;/server_name  localhost;\n    ssl_certificate       \/etc\/letsencrypt\/live\/${SUBDOMAIN}.${DOMAIN};/' /etc/nginx/conf.d/default.conf
+
+
+
+
+systemctl restart nginx #Restart the sever to update the settings
+
+
+
+
+
+
+
+
+
+
+
+##############################
+#List of websites that helped:
+# Installing OpenSSL1.0.2
+# - http://thelinuxfaq.com/403-how-to-install-openssl-1-0-2d-version-on-centos-6-centos-7-rhel
+# Installing Nginx mainline repo:
+# - http://m12.io/blog/http-2-with-haproxy-and-nginx-guide
+# Configuring selinux to work with the new webroot
+# - http://www.terminalinflection.com/relocating-apache-selinux/
+# Using letsencrypt with nginx
+# - https://www.digitalocean.com/community/tutorials/how-to-secure-nginx-with-let-s-encrypt-on-ubuntu-14-04
+# - https://letsencrypt.org/
+# - https://certbot.eff.org/
+# Testing http2
+# - https://tools.keycdn.com/http2-test
+# Installing development tools
+# - https://support.eapps.com/index.php?/Knowledgebase/Article/View/438/55/user-guide---installing-the-centos-development-tools-gcc-flex-etc#development-tools---included-applications
