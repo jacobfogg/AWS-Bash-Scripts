@@ -4,7 +4,7 @@
 
 #TODO: ask for input of the domain variables below
 SPARKTOKEN="xxxx"
-NODE="v6.5.0"
+NODE="v6.9.1"
 DOMAIN="your.domain.here"
 
 #Install Composer
