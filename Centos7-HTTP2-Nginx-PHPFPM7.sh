@@ -11,8 +11,8 @@ SUBDOMAIN=www
 
 #Set some script variables
 CENTVER="7"
-OPENSSL="openssl-1.0.2h"
-NGINX="nginx-1.11.3-1"
+OPENSSL="openssl-1.1.0f"
+NGINX="nginx-1.13.0-1"
 IPADDR="$(ip addr show eth0 | grep inet | awk '{ print $2; }' | head -1 | sed 's/\/.*$//')"
 
 #update the server
@@ -30,7 +30,7 @@ yum install -y wget openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtU
 
 #install but don't build OpenSSL 1.0.2h
 mkdir -p /opt/lib
-#TODO: Figure out why I had to run this twice to get a successful download...... maybe add a check and loop it a second time if the frist fails
+cd /opt/lib/
 wget https://www.openssl.org/source/${OPENSSL}.tar.gz /opt/lib/${OPENSSL}.tar.gz
 tar -zxvf /opt/lib/${OPENSSL}.tar.gz -C /opt/lib
 
@@ -38,7 +38,7 @@ tar -zxvf /opt/lib/${OPENSSL}.tar.gz -C /opt/lib
 rpm -ivh http://nginx.org/packages/mainline/centos/${CENTVER}/SRPMS/${NGINX}.el${CENTVER}.ngx.src.rpm #download the RPM
 sed -i "s|--with-http_ssl_module|--with-http_ssl_module --with-openssl=/opt/lib/${OPENSSL}|g" /root/rpmbuild/SPECS/nginx.spec #modify the config to add reference to the newer openssl
 rpmbuild -ba /root/rpmbuild/SPECS/nginx.spec #compile nginx
-rpm -ivh /root/rpmbuild/RPMS/x86_64/${NGINX}.el${CENTVER}.centos.ngx.x86_64.rpm #install it
+rpm -ivh /root/rpmbuild/RPMS/x86_64/nginx-${NGINX}.el${CENTVER}.ngx.x86_64.rpm #install it
 
 mkdir -p /var/www/${DOMAIN} #create the webroot where the SSL will be installed
 
@@ -83,7 +83,7 @@ yum install -y mariadb #nothing special here... I am not interested in installin
 rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
 
-yum install -y php70w-fpm php70w-opcache php70w-cli php70w-gd php70w-mbstring php70w-mcrypt php70w-mysql php70w-pdo php70w-xml php70w-xmlrpc #install php and a few modules
+yum install -y php71w-fpm php71w-opcache php71w-cli php71w-gd php71w-mbstring php71w-mcrypt php71w-mysql php71w-pdo php71w-xml php71w-xmlrpc #install php and a few modules
 sed -i.bak 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/' /etc/php.ini #modify the php.ini file to turn off fix_pathinfo for security
 sed -i.bak 's/worker_processes  1;/worker_processes  4;/' /etc/nginx/nginx.conf #increase the number of workers to 4
 sed -i 's/index  index.html/index  index.php  index.html/' /etc/nginx/conf.d/default.conf
