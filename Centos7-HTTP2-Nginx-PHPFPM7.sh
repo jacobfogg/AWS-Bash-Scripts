@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 
-#TODO: ask for input of the domain you wish to use with this server
-#TODO: ping that domain somehow to ensure the DNS is configured correctly.
+#TODO: Add an auto-renew certbot script
+#TODO: Test that this is root user
+#TODO: Ask for input of the domain you wish to use with this server
+#TODO: Ping that domain somehow to ensure the DNS is configured correctly.
 # TODO: If it's not, throw and error telling the user to add the DNS record and try after propagation finishes and die.
 
 #Set some user variables
 EMAIL=jacob@datajoe.com
-DOMAIN=djoe.us
-SUBDOMAIN=www
+DOMAIN=www.djoe.us
 
 #Set some script variables
 CENTVER="7"
 OPENSSL="openssl-1.1.0f"
 NGINX="nginx-1.13.0-1"
+PHPVER="php71w"
 IPADDR="$(ip addr show eth0 | grep inet | awk '{ print $2; }' | head -1 | sed 's/\/.*$//')"
 
 #update the server
@@ -25,6 +27,7 @@ useradd builder
 
 #install some helper tools
 yum install -y epel-release #the EPEL (Extra Packages for Enterprise Linux) Repository
+yum install –y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm #the AWS version of EPEL
 yum group install -y "Development Tools" #Install the development tools used for compiling from source
 yum install -y wget openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtUtils-Embed GeoIP-devel pcre-devel #Install several other packages
 
@@ -40,7 +43,12 @@ sed -i "s|--with-http_ssl_module|--with-http_ssl_module --with-openssl=/opt/lib/
 rpmbuild -ba /root/rpmbuild/SPECS/nginx.spec #compile nginx
 rpm -ivh /root/rpmbuild/RPMS/x86_64/nginx-${NGINX}.el${CENTVER}.ngx.x86_64.rpm #install it
 
+#disable SELinux
+setenforce 0
+echo 0 > /etc/selinux/enforce
+
 mkdir -p /var/www/${DOMAIN} #create the webroot where the SSL will be installed
+
 
 #Configure the new directory to be compatible with selinux
 semanage fcontext -a -t usr_t "/var/www/${DOMAIN}(/.*)?"
@@ -60,7 +68,7 @@ systemctl enable nginx #Enable nginx so it will start on boot
 
 #install the secure Cert:
 yum install -y certbot #Certbot itself
-certbot certonly --webroot -m ${EMAIL} -w /var/www/${DOMAIN} -d ${DOMAIN} -d ${SUBDOMAIN}.${DOMAIN} #Request the SSL using CertBot
+certbot certonly --webroot -m ${EMAIL} -w /var/www/${DOMAIN} -d ${DOMAIN} #Request the SSL using CertBot
 
 sed -i 's/listen       80;/listen       80;\n    listen       443 default_server ssl http2;/' /etc/nginx/conf.d/default.conf
 sed -i 's/server_name  localhost;/server_name  localhost;\n    ssl_certificate_key   \/etc\/letsencrypt\/live\/'${DOMAIN}'\/privkey.pem;/' /etc/nginx/conf.d/default.conf
@@ -83,7 +91,7 @@ yum install -y mariadb #nothing special here... I am not interested in installin
 rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
 
-yum install -y php71w-fpm php71w-opcache php71w-cli php71w-gd php71w-mbstring php71w-mcrypt php71w-mysql php71w-pdo php71w-xml php71w-xmlrpc #install php and a few modules
+yum install -y ${PHPVER}-fpm ${PHPVER}-opcache ${PHPVER}-cli ${PHPVER}-gd ${PHPVER}-mbstring ${PHPVER}-mcrypt ${PHPVER}-mysql ${PHPVER}-pdo ${PHPVER}-xml ${PHPVER}-xmlrpc #install php and a few modules
 sed -i.bak 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/' /etc/php.ini #modify the php.ini file to turn off fix_pathinfo for security
 sed -i.bak 's/worker_processes  1;/worker_processes  4;/' /etc/nginx/nginx.conf #increase the number of workers to 4
 sed -i 's/index  index.html/index  index.php  index.html/' /etc/nginx/conf.d/default.conf
