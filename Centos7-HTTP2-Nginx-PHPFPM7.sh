@@ -26,10 +26,9 @@ cd ~/
 useradd builder
 
 #install some helper tools
-yum install -y epel-release #the EPEL (Extra Packages for Enterprise Linux) Repository
-yum install –y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm #the AWS version of EPEL
+yum install –y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm #the AWS version of EPEL (Extra Packages for Enterprise Linux) Repository
 yum group install -y "Development Tools" #Install the development tools used for compiling from source
-yum install -y wget openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtUtils-Embed GeoIP-devel pcre-devel #Install several other packages
+yum install -y wget openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtUtils-Embed GeoIP-devel pcre-devel mariadb #Install several other packages
 
 #install but don't build OpenSSL 1.0.2h
 mkdir -p /opt/lib
@@ -48,6 +47,8 @@ setenforce 0
 echo 0 > /etc/selinux/enforce
 
 mkdir -p /var/www/${DOMAIN} #create the webroot where the SSL will be installed
+chmod 755 /var/www/${DOMAIN} #set the correct permissions
+chown ec2-user:ec2-user /var/www/${DOMAIN} #Set the ownership to ec2-user
 
 
 #Configure the new directory to be compatible with selinux
@@ -80,10 +81,6 @@ systemctl restart nginx #Restart the sever to update the settings
 #TODO: Figure out a way to automate the following:
 #TODO: suggest to the user that they test both the http and https references to their site
 #TODO: suggest to the user that they test HTTP2 compatibility via https://tools.keycdn.com/http2-test
-
-
-#Install MySql... well, really MariaDB
-yum install -y mariadb #nothing special here... I am not interested in installing a mysql server at this point, just the client
 
 
 #Install PHP-FPM
