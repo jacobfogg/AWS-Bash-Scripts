@@ -13,7 +13,7 @@ DOMAIN=www.djoe.us
 #Set some script variables
 CENTVER="7"
 OPENSSL="openssl-1.1.0f"
-NGINX="nginx-1.13.0-1"
+NGINX="nginx-1.13.3-1"
 PHPVER="php71w"
 IPADDR="$(ip addr show eth0 | grep inet | awk '{ print $2; }' | head -1 | sed 's/\/.*$//')"
 
@@ -26,11 +26,16 @@ cd ~/
 useradd builder
 
 #install some helper tools
-yum install –y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm #the AWS version of EPEL (Extra Packages for Enterprise Linux) Repository
-yum group install -y "Development Tools" #Install the development tools used for compiling from source
-yum install -y wget openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtUtils-Embed GeoIP-devel pcre-devel mariadb #Install several other packages
+#the AWS version of EPEL (Extra Packages for Enterprise Linux) Repository
+yum install –y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm 
+yum -y install yum-utils
+yum-config-manager --enable rhui-REGION-rhel-server-extras rhui-REGION-rhel-server-optional
+#Install the development tools used for compiling from source
+yum group install -y "Development Tools" 
+#Install several other packages
+yum install -y wget openssl-devel libxml2-devel libxslt-devel gd-devel perl-ExtUtils-Embed GeoIP-devel pcre-devel mariadb postgresql
 
-#install but don't build OpenSSL 1.0.2h
+#install but don't build OpenSSL 1.1.0f
 mkdir -p /opt/lib
 cd /opt/lib/
 wget https://www.openssl.org/source/${OPENSSL}.tar.gz /opt/lib/${OPENSSL}.tar.gz
@@ -40,7 +45,7 @@ tar -zxvf /opt/lib/${OPENSSL}.tar.gz -C /opt/lib
 rpm -ivh http://nginx.org/packages/mainline/centos/${CENTVER}/SRPMS/${NGINX}.el${CENTVER}.ngx.src.rpm #download the RPM
 sed -i "s|--with-http_ssl_module|--with-http_ssl_module --with-openssl=/opt/lib/${OPENSSL}|g" /root/rpmbuild/SPECS/nginx.spec #modify the config to add reference to the newer openssl
 rpmbuild -ba /root/rpmbuild/SPECS/nginx.spec #compile nginx
-rpm -ivh /root/rpmbuild/RPMS/x86_64/nginx-${NGINX}.el${CENTVER}.ngx.x86_64.rpm #install it
+rpm -ivh /root/rpmbuild/RPMS/x86_64/${NGINX}.el${CENTVER}.centos.ngx.x86_64.rpm #install it
 
 #disable SELinux
 setenforce 0
@@ -48,7 +53,7 @@ echo 0 > /etc/selinux/enforce
 
 mkdir -p /var/www/${DOMAIN} #create the webroot where the SSL will be installed
 chmod 755 /var/www/${DOMAIN} #set the correct permissions
-chown ec2-user:ec2-user /var/www/${DOMAIN} #Set the ownership to ec2-user
+chown centos:centos /var/www/${DOMAIN} #Set the ownership to centos user
 
 
 #Configure the new directory to be compatible with selinux
@@ -56,6 +61,8 @@ semanage fcontext -a -t usr_t "/var/www/${DOMAIN}(/.*)?"
 restorecon -Rv /var/www/${DOMAIN}
 
 sed -i.bak  '0,/\/usr\/share\/nginx\/html/s//\/var\/www\/'${DOMAIN}'/' /etc/nginx/conf.d/default.conf #Change root location for webroot
+sed -i  's/localhost/'${DOMAIN}'/' /etc/nginx/conf.d/default.conf #Change the server_name to the domain
+
 
 echo "Welcome to nginx" > /var/www/${DOMAIN}/index.html #Create an index.html file for nginx to render
 
@@ -68,13 +75,12 @@ systemctl enable nginx #Enable nginx so it will start on boot
 
 
 #install the secure Cert:
-yum install -y certbot #Certbot itself
-certbot certonly --webroot -m ${EMAIL} -w /var/www/${DOMAIN} -d ${DOMAIN} #Request the SSL using CertBot
+yum install -y certbot-nginx
+certbot --nginx
+sed -i  's/listen 443 ssl/listen 443 ssl http2/' /etc/nginx/conf.d/default.conf #add http2 support
 
-sed -i 's/listen       80;/listen       80;\n    listen       443 default_server ssl http2;/' /etc/nginx/conf.d/default.conf
-sed -i 's/server_name  localhost;/server_name  localhost;\n    ssl_certificate_key   \/etc\/letsencrypt\/live\/'${DOMAIN}'\/privkey.pem;/' /etc/nginx/conf.d/default.conf
-sed -i 's/server_name  localhost;/server_name  localhost;\n    ssl_certificate       \/etc\/letsencrypt\/live\/'${DOMAIN}'\/fullchain.pem;/' /etc/nginx/conf.d/default.conf
-sed -i 's/server_name  localhost/server_name  '${DOMAIN}'/' /etc/nginx/conf.d/default.conf
+#Check for the existance of the certbot renew, and if it doesn't exist, add it
+crontab -l | grep -q 'certbot renew'  && echo || (crontab -l 2>/dev/null; echo "0 1,13 * * * certbot renew -q") | crontab -
 
 systemctl restart nginx #Restart the sever to update the settings
 
@@ -85,13 +91,11 @@ systemctl restart nginx #Restart the sever to update the settings
 
 #Install PHP-FPM
 #install the webtatic repos
-rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
 
 yum install -y ${PHPVER}-fpm ${PHPVER}-opcache ${PHPVER}-cli ${PHPVER}-gd ${PHPVER}-mbstring ${PHPVER}-mcrypt ${PHPVER}-mysql ${PHPVER}-pdo ${PHPVER}-xml ${PHPVER}-xmlrpc #install php and a few modules
 sed -i.bak 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/' /etc/php.ini #modify the php.ini file to turn off fix_pathinfo for security
 sed -i.bak 's/worker_processes  1;/worker_processes  4;/' /etc/nginx/nginx.conf #increase the number of workers to 4
-sed -i 's/index  index.html/index  index.php  index.html/' /etc/nginx/conf.d/default.conf
 touch /var/log/nginx/access.log
 
 #Lest overwrite the default.conf to include several changes for PHP-FPM ... This is easier than a dozen sed commands.
@@ -102,6 +106,7 @@ server {
     server_name  ${IPADDR};
     ssl_certificate       /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key   /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
 
     access_log  /var/log/nginx/access.log  main;
     error_log   /var/log/nginx/error.log   error;
