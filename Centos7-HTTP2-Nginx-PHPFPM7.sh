@@ -93,7 +93,7 @@ systemctl restart nginx #Restart the sever to update the settings
 #install the webtatic repos
 rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
 
-yum install -y ${PHPVER}-fpm ${PHPVER}-opcache ${PHPVER}-cli ${PHPVER}-gd ${PHPVER}-mbstring ${PHPVER}-mcrypt ${PHPVER}-mysql ${PHPVER}-pdo ${PHPVER}-xml ${PHPVER}-xmlrpc #install php and a few modules
+yum install -y ${PHPVER}-fpm ${PHPVER}-opcache ${PHPVER}-cli ${PHPVER}-gd ${PHPVER}-mbstring ${PHPVER}-mcrypt ${PHPVER}-mysql ${PHPVER}-pdo ${PHPVER}-xml ${PHPVER}-xmlrpc ${PHPVER}-pgsql #install php and a few modules
 sed -i.bak 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/' /etc/php.ini #modify the php.ini file to turn off fix_pathinfo for security
 sed -i.bak 's/worker_processes  1;/worker_processes  4;/' /etc/nginx/nginx.conf #increase the number of workers to 4
 touch /var/log/nginx/access.log
